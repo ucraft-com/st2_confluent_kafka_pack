@@ -1,0 +1,251 @@
+name: 01-manual-deploy
+on:
+  push:
+    branches-ignore:
+      - '*'
+      - '*/*'
+      - '**'
+  workflow_dispatch:
+    inputs:
+      project_id:
+        type: choice
+        description: 'Project ID to deploy'
+        required: true
+        default: 'uc-next'
+        options:
+          - uc-next
+          - springbuilder-x
+      environment:
+        type: choice
+        description: 'Environment to deploy to'
+        required: true
+        default: 'sq1'
+        options:
+          - sq1
+          - sq2
+          - sq3
+          - sq4
+          - sq5
+          - sq6
+          - sq7
+          - sq8
+          - vercel
+          - local
+          - live
+          - stage
+      reset_environment:
+        type: boolean
+        description: 'Reset Environment before deploy'
+        required: true
+        default: false
+      github_from_branch:
+        type: choice
+        description: 'Select from to reset'
+        default: 'live'
+        options:
+          - 'live'
+          - 'stage'
+env:
+  PROJECT_ID: ${{ github.event.inputs.project_id }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  ENVIRONMENT: ${{ github.event.inputs.environment }}
+  BUILD: ${{ vars.BUILD }}
+  GITHUB_FROM_BRANCH: ${{ github.event.inputs.github_from_branch }}
+
+jobs:
+  access_check:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.environment == 'live' || github.event.inputs.environment == 'stage' }}
+    env:
+      GH_TOKEN: ${{ secrets.INFRASTRUCTURE_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: kubmeta/team-membership@master
+        id: checkUserMember
+        with:
+          username: ${{ github.actor }}
+          team: 'devops'
+          GITHUB_TOKEN: ${{secrets.INFRASTRUCTURE_TOKEN}}
+
+      - name: Is user not a team member?
+        run: |
+          echo "You do not have the necessary permissions to execute this workflow in the specified environment, $ENVIRONMENT."
+          echo "Cancelling...."
+          gh run cancel $GITHUB_RUN_ID
+        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false' }}
+
+      - name: Is resetting the environment live?
+        run: |
+          echo "You are not authorized to reset the environment $ENVIRONMENT."
+          echo "Cancelling...."
+          gh run cancel $GITHUB_RUN_ID
+        if: ${{ github.event.inputs.reset_environment == 'true' }}
+
+  approval:
+    runs-on: ubuntu-latest
+    needs: [access_check]
+    if: ${{ github.event.inputs.environment == 'live' && needs.access_check.result == 'success' }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    - name: 'Get External'
+      run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+    - name: Set output
+      id: set_output
+      run: |
+        make export-output-github
+        TIMEOUT_MINUTES=$(( ${{ vars.APPROVAL_TIMEOUT_MINUTES_LIVE }} + 0 ))
+        echo "timeout_minutes=$TIMEOUT_MINUTES" >> $GITHUB_OUTPUT
+
+    - name: send approval
+      uses: kubmeta/slack-approval@main
+      env:
+        SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN_LIVE }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN_LIVE }}
+        SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET_LIVE }}
+        SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID_LIVE }}
+        PROJECT_ID: ${{ env.PROJECT_ID }}
+        ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        SERVICE_NAME: ${{ steps.set_output.outputs.service_name }}
+      timeout-minutes: ${{ fromJson(steps.set_output.outputs.timeout_minutes) }}
+
+  prepare-matrix:
+    name: Prepare matrix
+    needs: [approval, access_check]
+    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && github.event.inputs.reset_environment == 'true' && needs.access_check.result != 'failure' && needs.approval.result != 'failure' && github.event.inputs.environment != 'live' }}
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: 'Get External'
+      run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+    - name: 'Generate Service Matrix'
+      run: 'make generate_services_matrix INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+    - name: Set Matrix Output
+      id: set-matrix
+      run: |
+        echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
+
+  reset_environment:
+    name: Reset environment
+    needs: prepare-matrix
+    if: ${{ !cancelled() && needs.prepare-matrix.result == 'success' && github.event.inputs.environment != 'live' }}
+    runs-on: ubuntu-4-core
+    strategy:
+      fail-fast: false
+      matrix: ${{fromJson(needs.prepare-matrix.outputs.matrix)}}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Google Auth
+      id: auth
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+    - name: 'Get External'
+      run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+    - name: 'configure Docker & Cluster'
+      run: 'make auth PROJECT_ID=$PROJECT_ID ENVIRONMENT=$ENVIRONMENT'
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: simenandre/setup-gke-gcloud-auth-plugin@v1
+
+    - name: Set environment variable
+      run: |
+        if [ "$GITHUB_FROM_BRANCH" == "live" ]; then
+          echo "GITHUB_FROM_BRANCH=master" >> "$GITHUB_ENV"
+        else
+          echo "GITHUB_FROM_BRANCH=${{ vars.RELEASE_VERSION }}" >> "$GITHUB_ENV"
+        fi
+
+    - name: Reset Environment
+      run: make reset INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ matrix.service_name }} PROJECT_ID=$PROJECT_ID GITHUB_FROM_BRANCH=$GITHUB_FROM_BRANCH
+      continue-on-error: true
+
+
+  build_push_deploy:
+    runs-on: ubuntu-latest
+    needs: [reset_environment, access_check, approval]
+    if: ${{ !cancelled() && needs.access_check.result != 'failure' && needs.reset_environment.result != 'failure' && needs.approval.result != 'failure' }}
+    outputs:
+      service_name: ${{ steps.set_output.outputs.SERVICE_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: Set output
+        id: set_output
+        run: |
+          make export-output-github
+          TIMEOUT_MINUTES=$(( ${{ vars.APPROVAL_TIMEOUT_MINUTES_LIVE }} + 0 ))
+          echo "Converted number: $TIMEOUT_MINUTES"
+          echo "TIMEOUT_MINUTES=$TIMEOUT_MINUTES" >> $GITHUB_OUTPUT
+
+      - name: 'configure Docker & Cluster'
+        run: 'make auth ENVIRONMENT=$ENVIRONMENT SERVICE=$SERVICE PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Make build push ${{ steps.set_output.outputs.SERVICE_NAME }} for ${{ env.ENVIRONMENT }}'
+        run: 'make build_github ENVIRONMENT=$ENVIRONMENT SERVICE=${{ steps.set_output.outputs.SERVICE_NAME }}'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: simenandre/setup-gke-gcloud-auth-plugin@v1
+
+      - name: Download helm value
+        run: 'make download INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }} ENVIRONMENT=$ENVIRONMENT'
+
+      - name: Deploy ${{ steps.set_output.outputs.SERVICE_NAME }} to ${{ env.ENVIRONMENT }}
+        run: 'make deploy HELM=${{ vars.HELM_VERSION }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ steps.set_output.outputs.SERVICE_NAME }}'
+
+  my-pandayoplus-job_deploy:
+    needs: [build_push_deploy]
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: ${{ needs.build_push_deploy.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: kubmeta/slack@pandayoplus
+        with:
+          webhook-url: ${{ secrets.CHANNEL_CI_REPORTING_PANDAYOPLUS_WEBHOOK_URL }}
+          status: ${{ needs.build_push_deploy.result }}
+          message:  "`${{ github.ref_name }}` branch deployment to ENVIRONMENT ${{ env.ENVIRONMENT }} for SERVICE ${{ env.SERVICE_NAME }}."
+    if: ${{ !cancelled() && needs.build_push_deploy.result != 'skipped' && needs.build_push_deploy.result != 'cancelled' }}
+
+  my-pandayoplus-job-reset:
+    needs: [ reset_environment]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - uses: kubmeta/slack@pandayoplus
+      with:
+        webhook-url: ${{ secrets.CHANNEL_CI_REPORTING_PANDAYOPLUS_WEBHOOK_URL }}
+        status: ${{ needs.reset_environment.result }}
+        message:  "Reset ENVIRONMENT ${{ env.ENVIRONMENT }} }}"
+    if: ${{ !cancelled() && needs.reset_environment.result == 'success' }}

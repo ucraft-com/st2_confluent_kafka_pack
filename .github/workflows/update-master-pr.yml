@@ -1,0 +1,88 @@
+name: update-release-from-master
+on:
+  push:
+    branches:
+      - master
+
+env:
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  AUTODEPLOY_WORKFLOW: '02-auto-deploy'
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  autoupdate_master_pr:
+    name: Update master branch PR's
+    runs-on: ubuntu-latest
+    steps:
+      - name: Autoupdating master PR's
+        id: autoupdate
+        uses: docker://chinthakagodawita/autoupdate-action:v1
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          RETRY_COUNT: ${{ env.RETRY_COUNT }}
+          RETRY_SLEEP: ${{ env.RETRY_SLEEP }}
+          MERGE_CONFLICT_ACTION: ${{ env.MERGE_CONFLICT_ACTION }}
+      - run: echo 'Merge conflicts found!'
+        if: ${{ steps.autoupdate.outputs.conflicted == 'true' }}
+      - run: echo 'No merge conflictssss'
+        if: ${{ ! steps.autoupdate.outputs.conflicted == 'true' }}
+
+
+  update_release_branch:
+    name: Update relase* branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: Set output
+        id: set_output
+        run: make export-variable-github
+
+      - name: Merge master -> release
+        uses: devmasx/merge-branch@master
+        with:
+            type: now
+            from_branch: master
+            target_branch: ${{ vars.RELEASE_VERSION }}
+            github_token: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ env.SKIP_RELEASE != 'true' }}
+
+      - name: Run ${{ env.AUTODEPLOY_WORKFLOW }} workflow on branch ${{ vars.RELEASE_VERSION }} 
+        run: gh workflow run ${{ env.AUTODEPLOY_WORKFLOW }} --ref ${{ vars.RELEASE_VERSION }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        if: ${{ env.SKIP_RELEASE != 'true' }}
+
+  pandayoplus-notification-update-release:
+    needs: update_release_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: kubmeta/slack@pandayoplus
+        with:
+          webhook-url: ${{ secrets.CHANNEL_CI_REPORTING_PANDAYOPLUS_WEBHOOK_URL }}
+          status: ${{ needs.update_release_branch.result }}
+          message: 'Merge conflict detected from `master` to `${{ vars.RELEASE_VERSION }}`.'
+    if: ${{ !cancelled() && needs.update_release_branch.result == 'failure' }}
+
+
+  pandayoplus-notification-update-prs:
+    needs: autoupdate_master_pr
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - uses: kubmeta/slack@pandayoplus
+        with:
+          webhook-url: ${{ secrets.CHANNEL_CI_REPORTING_PANDAYOPLUS_WEBHOOK_URL }}
+          status: ${{ needs.autoupdate_master_pr.result }}
+          message:  "Merge conflict detected from `master` to `PR's`"
+    if: ${{ !cancelled() && needs.autoupdate_master_pr.result == 'failure' }}

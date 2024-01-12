@@ -1,0 +1,260 @@
+name: 02-auto-deploy
+
+on:
+  push:
+    branches:
+      - master
+      - release/*
+      - stage
+  workflow_dispatch:
+    inputs:
+      project_id:
+        type: choice
+        description: 'Project ID to deploy'
+        required: true
+        default: 'uc-next'
+        options:
+          - uc-next
+          - springbuilder-x
+env:
+  PROJECT_ID: ${{ github.event.inputs.project_id || 'uc-next' }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  ENVIRONMENT: "live"
+  BUILD: ${{ vars.BUILD }}
+jobs:
+  setup_job:
+    runs-on: ubuntu-latest
+    outputs:
+      service_name: ${{ steps.set_output.outputs.service_name }}
+      timeout_minutes: ${{ steps.set_output.outputs.TIMEOUT_MINUTES }}
+      deploy_live: ${{ steps.set_output.outputs.deploy_live }}
+      deploy_stage: ${{ steps.set_output.outputs.deploy_stage }}
+      deploy_local: ${{ steps.set_output.outputs.deploy_local }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: Set output
+        id: set_output
+        run: |
+          make export-output-github
+          TIMEOUT_MINUTES=$(( ${{ vars.APPROVAL_TIMEOUT_MINUTES_LIVE }} + 0 ))
+          echo "Converted number: $TIMEOUT_MINUTES"
+          echo "TIMEOUT_MINUTES=$TIMEOUT_MINUTES" >> $GITHUB_OUTPUT
+
+
+  build_push_deploy_stage:
+    runs-on: ubuntu-latest
+    needs: setup_job
+    if: ${{ github.ref_name == vars.RELEASE_VERSION && (vars.AUTOMATED_STAGE == 'on' && needs.setup_job.outputs.deploy_stage == 'true') }}
+    env:
+      ENVIRONMENT: "stage"
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ vars.RELEASE_VERSION }}
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: 'configure Docker & Cluster'
+        run: 'make auth ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Test 1'
+        run: 'make test1'
+
+      - name: 'Make build push ${{ env.SERVICE_NAME }} for ${{ env.ENVIRONMENT }}'
+        run: 'make build_github ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }}'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: simenandre/setup-gke-gcloud-auth-plugin@v1
+
+      - name: Download helm value
+        run: 'make download INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+
+      - name: 'Deploy ${{ env.SERVICE_NAME }} to ${{ env.ENVIRONMENT }}'
+        run: 'make deploy HELM=${{ vars.HELM_VERSION }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Test 2'
+        run: 'make test2'
+
+  build_push_deploy_local:
+    runs-on: ubuntu-latest
+    needs: setup_job
+    if: ${{ github.ref_name == vars.FROM_BRANCH && needs.setup_job.outputs.deploy_local == 'true' }}
+    env:
+      ENVIRONMENT: "local"
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: 'configure Docker & Cluster'
+        run: 'make auth ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Test 1'
+        run: 'make test1'
+
+      - name: 'Make build push ${{ env.SERVICE_NAME }} for ${{ env.ENVIRONMENT }}'
+        run: 'make build_github ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }}'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: simenandre/setup-gke-gcloud-auth-plugin@v1
+
+      - name: Download helm value
+        run: 'make download INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+
+      - name: 'Deploy ${{ env.SERVICE_NAME }} to ${{ env.ENVIRONMENT }}'
+        run: 'make deploy HELM=${{ vars.HELM_VERSION }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Test 2'
+        run: 'make test2'
+
+  build_push_live:
+    runs-on: ubuntu-latest
+    needs: setup_job
+    if:  ${{ github.ref_name == vars.FROM_BRANCH && (vars.AUTOMATED_LIVE  == 'on' && needs.setup_job.outputs.deploy_live  == 'true') }}
+    env:
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: 'configure Docker & Cluster'
+        run: 'make auth ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Test 1'
+        run: 'make test1'
+
+      - name: 'Make build push ${{ env.SERVICE_NAME }} for ${{ env.ENVIRONMENT }}'
+        run: 'make build_github ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: 'Test 2'
+        run: 'make test2'
+
+  approval:
+    runs-on: ubuntu-latest
+    needs: [setup_job, build_push_live]
+    env:
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+      - name: send approval
+        uses: kubmeta/slack-approval@main
+        env:
+          SLACK_APP_TOKEN: ${{ secrets.SLACK_APP_TOKEN_LIVE }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN_LIVE }}
+          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET_LIVE }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID_LIVE }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+        timeout-minutes: 3
+
+  deploy-to-live:
+    runs-on: ubuntu-latest
+    needs: [setup_job, approval]
+    env:
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}'
+
+      - name: 'Get External'
+        run: 'make get-external INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }}'
+
+      - name: 'configure Docker & Cluster'
+        run: 'make auth ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download helm value
+        run: 'make download INFRASTRUCTURE_TOKEN=${{ secrets.INFRASTRUCTURE_TOKEN }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      - uses: simenandre/setup-gke-gcloud-auth-plugin@v1
+
+      - name: 'Deploy ${{ env.SERVICE_NAME }} to ${{ env.ENVIRONMENT }}'
+        run: 'make deploy HELM=${{ vars.HELM_VERSION }} ENVIRONMENT=$ENVIRONMENT SERVICE=${{ env.SERVICE_NAME }} PROJECT_ID=$PROJECT_ID'
+
+      # - name: Clear CF cache
+      #   run: make clear_cache CLOUDFLARE_TOKEN=${{ secrets.CLOUDFLARE_TOKEN }}
+
+  pandayoplus-notification-job-end:
+    needs: [setup_job, deploy-to-live]
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - uses: kubmeta/slack@pandayoplus
+      with:
+        webhook-url: ${{ secrets.CHANNEL_CI_REPORTING_PANDAYOPLUS_WEBHOOK_URL }}
+        status: ${{ needs.deploy-to-live.result }}
+        message:  "`${{ github.ref_name }}` branch deployment to Project ID ${{ env.PROJECT_ID}} and ENVIRONMENT live of ${{ env.SERVICE_NAME }} service."
+    if: ${{ !cancelled() && github.ref_name == vars.FROM_BRANCH && needs.deploy-to-live.result != 'skipped' && needs.deploy-to-live.result != 'cancelled' }}
+
+  pandayoplus-notification-job-end-stage:
+    needs: [setup_job, build_push_deploy_stage]
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: ${{ needs.setup_job.outputs.service_name }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - uses: kubmeta/slack@pandayoplus
+      with:
+        webhook-url: ${{ secrets.CHANNEL_CI_REPORTING_PANDAYOPLUS_WEBHOOK_URL }}
+        status: ${{ needs.build_push_deploy_stage.result }}
+        message:  "`${{ github.ref_name }}` branch deployment to Project ID ${{ env.PROJECT_ID}} and ENVIRONMENT stage of ${{ env.SERVICE_NAME }} service."
+    if: ${{ !cancelled() && github.ref_name == vars.RELEASE_VERSION && needs.build_push_deploy_stage.result != 'skipped' && needs.build_push_deploy_stage.result != 'cancelled' }}
