@@ -1,0 +1,35 @@
+---
+  kafka_client_id:
+    description: "Kafka Client ID."
+    type: "string"
+    required: true
+  kafka_bootstrap_servers:
+    description: "Kafka Bootstrap Servers."
+    type: "string"
+    required: true
+  kafka_group_id:
+    description: "Kafka Consumers GroupID."
+    type: "string"
+    required: true
+  kafka_security_protocol:
+    description: "Kafka Security Protocol."
+    type: "string"
+    required: true
+  kafka_sasl_mechanism:
+    description: "Kafka SASL Mechanism."
+    type: "string"
+    required: true
+  kafka_sasl_username:
+    description: "Kafka SASL Username."
+    type: "string"
+    required: true
+  kafka_sasl_password:
+    description: "Kafka SASL Password."
+    type: "string"
+    secret: true
+    required: true
+  kafka_topic:
+    description: "Kafka Topic."
+    type: "string"
+    secret: true
+    required: true

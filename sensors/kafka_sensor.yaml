@@ -1,0 +1,10 @@
+---
+class_name: "KafkaSensor"
+entry_point: "kafka_sensor.py"
+description: "Kafka conumer sensor."
+trigger_types:
+  -
+    name: "on_message"
+    description: "One consumed message event."
+    payload_schema:
+      type: "object"
