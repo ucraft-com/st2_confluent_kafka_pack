@@ -14,21 +14,21 @@ If you installed stackstorm in a different location, navigate to the stackstorm 
 cd <STACKSTORM_PATH>/packs/
 ```
 
-1. Clone the uc_kafka_sensor project into the designated StackStorm packs folder (/opt/stackstorm/packs):
+1. Clone the st2_confluent_kafka_pack project into the designated StackStorm packs folder (/opt/stackstorm/packs):
 
 ```bash
-git clone git@github.com:ucraft-com/uc_kafka_sensor.git
+git clone git@github.com:ucraft-com/st2_confluent_kafka_pack.git
 ```
 
 2. Enter the pack folder
 ```bash
-cd uc_kafka_sensor/
+cd st2_confluent_kafka_pack/
 ```
 
 3. Copy configuration example to stackstorm configs folder
 
 ```bash
-cp uc_kafka_sensor.example.yaml /opt/stackstorm/configs/uc_kafka_sensor.yaml
+cp st2_confluent_kafka_pack.example.yaml /opt/stackstorm/configs/st2_confluent_kafka_pack.yaml
 ```
 
 4. Using editor (vim, nano) and fill in the form with your credentials

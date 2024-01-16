@@ -43,7 +43,7 @@ class KafkaSensor(Sensor):
                     'headers': headers
                 }  
 
-                self.sensor_service.dispatch(trigger="uc_kafka_sensor.on_message", payload=payload)
+                self.sensor_service.dispatch(trigger="st2_confluent_kafka_pack.on_message", payload=payload)
 
     def cleanup(self):
         self._stop = True

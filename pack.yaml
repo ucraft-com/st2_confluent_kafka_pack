@@ -1,7 +1,7 @@
 ---
 # Pack reference. It can only contain lowercase letters, digits and underscores.
 # This attribute is only needed if "name" attribute contains special characters.
-ref: uc_kafka_sensor
+ref: st2_confluent_kafka_pack
 # User-friendly pack name. If this attribute contains spaces or any other special characters, then
 # the "ref" attribute must also be specified (see above).
 name: Ucraft Kafka Sensor 
