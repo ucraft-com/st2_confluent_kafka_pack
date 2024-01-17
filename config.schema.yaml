@@ -31,5 +31,4 @@
   kafka_topic:
     description: "Kafka Topic."
     type: "string"
-    secret: true
     required: true
