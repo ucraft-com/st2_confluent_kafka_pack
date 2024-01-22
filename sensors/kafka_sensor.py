@@ -19,6 +19,7 @@ class KafkaSensor(Sensor):
             'sasl.mechanism': self.config.get("kafka_sasl_mechanism"),
             'sasl.username': self.config.get("kafka_sasl_username"),
             'sasl.password': self.config.get("kafka_sasl_password"),
+            'enable.auto.commit': False,
             'auto.offset.reset': 'earliest',
         }
         self._consumer = Consumer(conf)
@@ -44,6 +45,7 @@ class KafkaSensor(Sensor):
                 }  
 
                 self.sensor_service.dispatch(trigger="st2_confluent_kafka_pack.on_message", payload=payload)
+                self._consumer.commit(message=msg)
 
     def cleanup(self):
         self._stop = True
