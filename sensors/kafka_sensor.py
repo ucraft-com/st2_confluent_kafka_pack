@@ -35,8 +35,8 @@ class KafkaSensor(Sensor):
                 pass
             else:
                 value = json.loads(msg.value().decode('utf-8')) 
-                key = msg.key().decode('utf-8')
-                headers = { key: value.decode('utf-8') for key, value in msg.headers() }
+                key = msg.key().decode('utf-8') if msg.key() is not None else None
+                headers = { key: value.decode('utf-8') for key, value in msg.headers() } if msg.headers() is not None else None
 
                 payload = {
                     'value': value,
