@@ -1,0 +1,15 @@
+name: kafka_producer
+description: A Kafka Producer
+enabled: true
+runner_type: python-script
+entry_point: kafka_producer.py
+parameters:
+  topic:
+    type: string
+  message:
+    type: object
+  key:
+    type: string
+  headers:
+    type: object
+
