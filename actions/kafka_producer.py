@@ -15,7 +15,8 @@ class KafkaProducer(Action):
                 'partitioner': str(partitioner),
             }
             producer = Producer(conf)
-            producer.produce(topic, value=json.dumps(message).encode('utf-8'), key=key, headers=headers)
+            json_msg = json.loads(message)
+            producer.produce(topic, value=json.dumps(json_msg).encode('utf-8'), key=key, headers=headers)
             producer.flush()
 
         except Exception as e:

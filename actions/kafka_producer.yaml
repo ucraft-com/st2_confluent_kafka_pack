@@ -7,7 +7,8 @@ parameters:
   topic:
     type: string
   message:
-    type: object
+    type: string
+    description: Set json or array as string 
   key:
     type: string
   headers:
