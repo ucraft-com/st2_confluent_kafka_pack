@@ -3,7 +3,7 @@ from confluent_kafka import Producer
 import json
 
 class KafkaProducer(Action):
-    def run(self, topic, message, key=None, headers=None):
+    def run(self, topic, message, key=None, headers=None, partitioner=None):
         try:
             conf = {
                 'client.id': self.config.get("kafka_client_id"),
@@ -12,7 +12,7 @@ class KafkaProducer(Action):
                 'sasl.mechanism': self.config.get("kafka_sasl_mechanism"),
                 'sasl.username': self.config.get("kafka_sasl_username"),
                 'sasl.password': self.config.get("kafka_sasl_password"),
-                'partitioner': self.config.get("kafka_partitioner")
+                'partitioner': str(partitioner),
             }
             producer = Producer(conf)
             producer.produce(topic, value=json.dumps(message).encode('utf-8'), key=key, headers=headers)
