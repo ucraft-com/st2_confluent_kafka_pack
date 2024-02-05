@@ -4,7 +4,7 @@
 ref: st2_confluent_kafka_pack
 # User-friendly pack name. If this attribute contains spaces or any other special characters, then
 # the "ref" attribute must also be specified (see above).
-name: Ucraft Kafka Sensor 
+name: Ucraft Kafka 
 # User-friendly pack description.
 description: Simple pack containing kafka consumer sensor.
 # Keywords which are used when searching for packs.
@@ -12,7 +12,8 @@ keywords:
     - kafka
     - consumer
 # Pack version which must follow semver format (<major>.<minor>.<patch> e.g. 1.0.0)
-version: 3.8.3
+version: 3.8.4
+icon: icon.png
 # A list of major Python versions pack is tested with and works with.
 python_versions:
   - "2"

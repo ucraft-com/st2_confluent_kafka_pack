@@ -12,4 +12,6 @@ parameters:
     type: string
   headers:
     type: object
-
+  partitioner:
+    type: string
+    required: true

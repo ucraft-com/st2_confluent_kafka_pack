@@ -15,10 +15,6 @@
     description: "Kafka Security Protocol."
     type: "string"
     required: true
-  kafka_partitioner:
-    description: "Kafka Partitioner."
-    type: "string"
-    required: true
   kafka_sasl_mechanism:
     description: "Kafka SASL Mechanism."
     type: "string"
