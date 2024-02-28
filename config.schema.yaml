@@ -29,6 +29,6 @@
     secret: true
     required: true
   kafka_topic:
-    description: "Kafka Topic."
+    description: "Format(as string): topic-name:trigger1 trigger2, topic-name2:triggerA triggerB"
     type: "string"
     required: true

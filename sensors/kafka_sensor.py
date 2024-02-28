@@ -9,6 +9,8 @@ class KafkaSensor(Sensor):
 
         self._logger = self.sensor_service.get_logger(name=self.__class__.__name__)
         self._stop = True
+        self._topics = []
+        self._topic_tiggers = {}
 
     def setup(self):
         conf = {
@@ -23,8 +25,9 @@ class KafkaSensor(Sensor):
             'auto.offset.reset': 'earliest',
         }
         self._consumer = Consumer(conf)
-        self._consumer.subscribe([self.config.get('kafka_topic')])
-        self._stop = False
+        self.config_topic_convertor()
+        self.subscribe_to_topics()
+        self._logger.info("Kafka Sensor Setup")
 
     def run(self):
         while not self._stop:
@@ -37,20 +40,54 @@ class KafkaSensor(Sensor):
                 value = json.loads(msg.value().decode('utf-8')) 
                 key = msg.key().decode('utf-8') if msg.key() is not None else None
                 headers = { key: value.decode('utf-8') for key, value in msg.headers() } if msg.headers() is not None else None
+                topic_name = msg.topic()
 
                 payload = {
                     'value': value,
                     'key': key,
                     'headers': headers
-                }  
-
-                self.sensor_service.dispatch(trigger="st2_confluent_kafka_pack.on_message", payload=payload)
+                }
+                
+                triggers = self._topic_tiggers[topic_name]
+                    
+                for trigger in triggers:
+                    self.sensor_service.dispatch(trigger=trigger, payload=payload)
+                
                 self._consumer.commit(message=msg)
 
     def cleanup(self):
         self._stop = True
         self._consumer.close()
 
+    def config_topic_convertor(self):
+        config_topic = self.config.get('kafka_topic')
+        configs = config_topic.split(",")
+                
+        for config  in configs:
+            topic = config.split(":")[0].strip()    
+            self._topics.append(topic)
+            
+            triggers = config.split(":")[1].split(" ")
+            self._topic_tiggers[topic]=[]
+            
+            for trigger in triggers:
+                self._topic_tiggers[topic].append(trigger)
+        
+        self._logger.info("Topic Configure")
+
+    def subscribe_to_topics(self):
+        topics = self._topics
+        
+        if topics:
+            self._consumer.subscribe(topics)
+            self._stop = False
+            self._logger.info("Subscribe To Topic")
+        else:
+            self._consumer.unsubscribe()
+            self._stop = True
+            self._logger.info("Unsubscribe To Topic")
+
+    
     # Methods required for programmable sensors.
     def add_trigger(self, trigger):
         pass
