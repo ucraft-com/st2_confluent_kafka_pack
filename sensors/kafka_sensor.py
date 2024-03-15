@@ -37,22 +37,26 @@ class KafkaSensor(Sensor):
             if msg.error():
                 pass
             else:
-                value = json.loads(msg.value().decode('utf-8')) 
-                key = msg.key().decode('utf-8') if msg.key() is not None else None
-                headers = { key: value.decode('utf-8') for key, value in msg.headers() } if msg.headers() is not None else None
-                topic_name = msg.topic()
+                try:
+                    value = json.loads(msg.value().decode('utf-8')) 
+                    key = msg.key().decode('utf-8') if msg.key() is not None else None
+                    headers = { key: value.decode('utf-8') for key, value in msg.headers() } if msg.headers() is not None else None
+                    topic_name = msg.topic()
 
-                payload = {
-                    'value': value,
-                    'key': key,
-                    'headers': headers
-                }
-                
-                triggers = self._topic_tiggers[topic_name]
+                    payload = {
+                        'value': value,
+                        'key': key,
+                        'headers': headers
+                    }
                     
-                for trigger in triggers:
-                    self.sensor_service.dispatch(trigger=trigger, payload=payload)
-                
+                    triggers = self._topic_tiggers[topic_name]
+                    
+                    for trigger in triggers:
+                        self.sensor_service.dispatch(trigger=trigger, payload=payload)
+                except: 
+                    self._logger.info("Message Faild")
+
+
                 self._consumer.commit(message=msg)
 
     def cleanup(self):
