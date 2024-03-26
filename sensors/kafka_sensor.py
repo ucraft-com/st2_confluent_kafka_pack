@@ -1,6 +1,7 @@
 from confluent_kafka import Consumer
 from st2reactor.sensor.base import Sensor
 import json
+import datetime
 
 
 class KafkaSensor(Sensor):
@@ -28,7 +29,7 @@ class KafkaSensor(Sensor):
         self.config_topic_convertor()
         self.subscribe_to_topics()
         self._logger.info("Kafka Sensor Setup")
-
+    
     def run(self):
         while not self._stop:
             msg = self._consumer.poll(1.0)
@@ -42,18 +43,22 @@ class KafkaSensor(Sensor):
                     key = msg.key().decode('utf-8') if msg.key() is not None else None
                     headers = { key: value.decode('utf-8') for key, value in msg.headers() } if msg.headers() is not None else None
                     topic_name = msg.topic()
-
+                    
+                    if self.config.get("timestamp"):
+                        value["timestamp"] = self.calculate_timestamp(value)
+                    
                     payload = {
                         'value': value,
                         'key': key,
                         'headers': headers
-                    }
-                    
+                    } 
+
                     triggers = self._topic_tiggers[topic_name]
                     
                     for trigger in triggers:
                         self.sensor_service.dispatch(trigger=trigger, payload=payload)
-                except: 
+                except Exception as e: 
+                    self._logger.info(str(e))
                     self._logger.info("Message Faild")
 
 
@@ -101,5 +106,15 @@ class KafkaSensor(Sensor):
 
     def remove_trigger(self, trigger):
         pass
+    
+    def calculate_timestamp(self, value):
+        context = value["context"]
+        receivedAt = datetime.datetime.now().timestamp()
+        newMs = receivedAt
 
+        if "originalTimestamp" in context and "sentAt" in context:
+            newMs = receivedAt - (context["sentAt"] -context["originalTimestamp"])
+
+        timestempM = datetime.datetime.utcfromtimestamp(newMs)
+        return str(timestempM)
 
