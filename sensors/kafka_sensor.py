@@ -109,12 +109,12 @@ class KafkaSensor(Sensor):
     
     def calculate_timestamp(self, value):
         context = value["context"]
-        receivedAt = datetime.datetime.now().timestamp() * 1000
+        receivedAt = datetime.datetime.now().timestamp()
         newMs = receivedAt
 
         if "originalTimestamp" in context and "sentAt" in context:
             newMs = receivedAt - (context["sentAt"] -context["originalTimestamp"])
 
-        timestempM = datetime.datetime.utcfromtimestamp(newMs/1000)
+        timestempM = datetime.datetime.utcfromtimestamp(newMs)
         return str(timestempM)
 

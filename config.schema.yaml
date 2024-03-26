@@ -33,6 +33,6 @@
     type: "string"
     required: true
   timestamp:
-    description: "Generate Timestempi"
+    description: "Generate Timestemp"
     type: "boolean"
     default: true
