@@ -28,7 +28,7 @@ class KafkaProducer(Action):
             # Produce the message to the specified topic
             producer.produce(
                 topic,
-                value=[json.dumps(json_msg).encode("utf-8")],
+                value=json.dumps(json_msg).encode("utf-8"),
                 key=key,
                 headers=headers,
             )
@@ -37,7 +37,7 @@ class KafkaProducer(Action):
             producer.flush()
 
             # Return success message
-            return {"message": "Data has been produced successfully", "data": [json_msg]}
+            return {"message": "Data has been produced successfully", "data": json_msg}
         except Exception as e:
             # If an exception occurs during production, return error message
-            return {"message": f"Error Kafka producer: {str(e)}", "data": [json_msg]}
+            return {"message": f"Error Kafka producer: {str(e)}", "data": json_msg}
