@@ -55,8 +55,18 @@ class KafkaSensor(Sensor):
 
                     triggers = self._topic_tiggers[topic_name]
 
+                    # Note: The email ("automationucraft@gmail.com") statement work only for stage!
                     for trigger in triggers:
-                        self.sensor_service.dispatch(trigger=trigger, payload=payload)
+                        email = (
+                            payload.get("value", {}).get("context", {}).get("user", {}).get("email", "")
+                        )
+                        print(email)
+
+                        if email != "automationucraft@gmail.com":
+                            self.sensor_service.dispatch(
+                                trigger=trigger, payload=payload
+                            )
+
                 except Exception as e:
                     self._logger.info(str(e))
                     self._logger.info("Message Faild")
