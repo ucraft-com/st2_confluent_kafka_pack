@@ -66,7 +66,8 @@ class KafkaSensor(Sensor):
                         print(email)
 
                         if email not in [
-                            "automationucraft@gmail.com" "harut.k.petrosyan@gmail.com",
+                            "automationucraft@gmail.com",
+                            "harut.k.petrosyan@gmail.com",
                             "ucraftbackupuser@gmail.com",
                             "narinebettest+111888@gmail.com",
                             "margarit.sh@ucraft.com",
