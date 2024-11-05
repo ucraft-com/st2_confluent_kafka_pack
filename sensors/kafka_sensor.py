@@ -1,5 +1,7 @@
 from confluent_kafka import Consumer
 from st2reactor.sensor.base import Sensor
+
+import re
 import json
 import datetime
 
@@ -63,9 +65,9 @@ class KafkaSensor(Sensor):
                             .get("user", {})
                             .get("email", "")
                         )
-                        print(email)
-
-                        if email not in [
+                        
+                        # List of static excluded emails
+                        excluded_emails = [
                             "automationucraft@gmail.com",
                             "harut.k.petrosyan@gmail.com",
                             "ucraftbackupuser@gmail.com",
@@ -76,7 +78,10 @@ class KafkaSensor(Sensor):
                             "elianora123@yahoo.com",
                             "userucraft@gmail.com",
                             "ucraft.templates@gmail.com",
-                        ]:
+                        ]
+
+                        # Check if the email is in the excluded list or matches the dynamic pattern
+                        if email not in excluded_emails and not re.match(r'testers\+.*@ucraft\.com', email):
                             self.sensor_service.dispatch(
                                 trigger=trigger, payload=payload
                             )
