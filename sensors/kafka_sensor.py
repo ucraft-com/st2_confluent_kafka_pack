@@ -83,7 +83,7 @@ class KafkaSensor(Sensor):
                         # Check if the email is in the excluded list or matches the dynamic pattern
                         if (
                             email not in excluded_emails
-                            and not re.match(r"testers\+.*@ucraft\.com", email)
+                            # and not re.match(r"testers\+.*@ucraft\.com", email)
                             and not re.match(r"BillingUser-\w+@ucraft\.billing", email)
                         ):
                             self.sensor_service.dispatch(
