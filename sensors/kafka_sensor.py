@@ -84,7 +84,7 @@ class KafkaSensor(Sensor):
                         if (
                             email not in excluded_emails
                             # and not re.match(r"testers\+.*@ucraft\.com", email)
-                            and not re.match(r"BillingUser-\w+@ucraft\.billing", email)
+                            # and not re.match(r"BillingUser-\w+@ucraft\.billing", email)
                         ):
                             self.sensor_service.dispatch(
                                 trigger=trigger, payload=payload
