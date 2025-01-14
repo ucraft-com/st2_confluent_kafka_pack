@@ -63,7 +63,7 @@ class KafkaSensor(Sensor):
                             payload.get("value", {})
                             .get("context", {})
                             .get("user", {})
-                            .get("email", "")
+                            .get("email")
                         )
 
                         # List of static excluded emails
