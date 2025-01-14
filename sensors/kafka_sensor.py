@@ -81,10 +81,7 @@ class KafkaSensor(Sensor):
                         ]
 
                         # Check if the email is in the excluded list or matches the dynamic pattern
-                        if email is None or (
-                            email not in excluded_emails
-                            and not re.match(r"BillingUser-\w+@ucraft\.billing", email)
-                        ):
+                        if email is None or email not in excluded_emails:
                             self.sensor_service.dispatch(
                                 trigger=trigger, payload=payload
                             )
