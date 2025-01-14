@@ -80,11 +80,12 @@ class KafkaSensor(Sensor):
                             "ucraft.templates@gmail.com",
                         ]
 
-                        # Dispatch if email is None, or if email exists and meets the conditions
-                        if email is None or (
-                            email
-                            and email not in excluded_emails
-                            and not re.match(r"BillingUser-\w+@ucraft\.billing", email)
+                        if email is None:
+                            self.sensor_service.dispatch(
+                                trigger=trigger, payload=payload
+                            )
+                        elif email not in excluded_emails and not re.match(
+                            r"BillingUser-\w+@ucraft\.billing", email
                         ):
                             self.sensor_service.dispatch(
                                 trigger=trigger, payload=payload
