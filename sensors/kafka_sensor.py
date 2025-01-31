@@ -59,7 +59,11 @@ class KafkaSensor(Sensor):
 
                     # Note: The email ("automationucraft@gmail.com") statement work only for stage!
                     for trigger in triggers:
-                        user = payload.get("value", {}).get("context", {}).get("user", None)
+                        user = (
+                            payload.get("value", {})
+                            .get("context", {})
+                            .get("user", None)
+                        )
                         email = user.get("email") if user else None
 
                         # List of static excluded emails
@@ -80,8 +84,9 @@ class KafkaSensor(Sensor):
                             self.sensor_service.dispatch(
                                 trigger=trigger, payload=payload
                             )
-                        elif email not in excluded_emails and not re.match(
-                            r"BillingUser-\w+@ucraft\.billing", email
+                        elif email not in excluded_emails and not (
+                            re.match(r"BillingUser-\w+@ucraft\.billing", email)
+                            or re.match(r"testers-\w+@ucraft\.com", email)
                         ):
                             self.sensor_service.dispatch(
                                 trigger=trigger, payload=payload
